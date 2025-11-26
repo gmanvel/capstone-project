@@ -1,0 +1,20 @@
+[project]
+name = "background-job"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "hr-chatbot-config",
+    "rag-pipeline",
+    "schedule>=1.2.0",
+]
+
+[tool.uv.sources]
+hr-chatbot-config = { workspace = true }
+rag-pipeline = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sync"]

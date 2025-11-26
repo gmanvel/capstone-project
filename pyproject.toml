@@ -1,0 +1,14 @@
+[project]
+name = "hr-chatbot"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["shared/config", "shared/rag-pipeline", "api", "background-job"]
+
+[dependency-groups]
+dev = [
+    "black>=24.0.0",
+    "ruff>=0.1.0",
+]

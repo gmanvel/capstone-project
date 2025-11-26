@@ -1,0 +1,162 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: hr-chatbot-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hrbot}
+      POSTGRES_USER: ${POSTGRES_USER:-hrbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrbot_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - hr-chatbot-network
+    restart: unless-stopped
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: hr-chatbot-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - hr-chatbot-network
+    restart: unless-stopped
+
+  # API Service (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: hr-chatbot-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      # Database Configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hrbot}
+      POSTGRES_USER: ${POSTGRES_USER:-hrbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrbot_dev_password}
+
+      # Qdrant Configuration
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-hr_documents}
+
+      # Confluence Configuration
+      CONFLUENCE_BASE_URL: ${CONFLUENCE_BASE_URL}
+      CONFLUENCE_TOKEN: ${CONFLUENCE_TOKEN}
+      CONFLUENCE_SPACE_KEY: ${CONFLUENCE_SPACE_KEY}
+
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.7}
+
+      # Ollama Configuration (Running locally on host)
+      # The application expects `OLLAMA_BASE_URL` in settings. Keep a
+      # host.docker.internal default so containers can reach the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+
+      # Memory Configuration
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
+      MEMORY_MESSAGE_THRESHOLD: ${MEMORY_MESSAGE_THRESHOLD:-6}
+      MEMORY_MAX_SUMMARY_LENGTH: ${MEMORY_MAX_SUMMARY_LENGTH:-500}
+      MEMORY_SUMMARIZATION_TEMPERATURE: ${MEMORY_SUMMARIZATION_TEMPERATURE:-0.3}
+
+      # Application Settings
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./api:/app/api
+      - ./shared:/app/shared
+    networks:
+      - hr-chatbot-network
+    restart: unless-stopped
+
+  # Background Job Service (Confluence Sync)
+  background-job:
+    build:
+      context: .
+      dockerfile: background-job/Dockerfile
+    container_name: hr-chatbot-background-job
+    environment:
+      # Database Configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hrbot}
+      POSTGRES_USER: ${POSTGRES_USER:-hrbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrbot_dev_password}
+
+      # Qdrant Configuration
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-hr_documents}
+
+      # Confluence Configuration
+      CONFLUENCE_BASE_URL: ${CONFLUENCE_BASE_URL}
+      CONFLUENCE_USERNAME: ${CONFLUENCE_USERNAME}
+      CONFLUENCE_TOKEN: ${CONFLUENCE_TOKEN}
+      CONFLUENCE_SPACE_KEY: ${CONFLUENCE_SPACE_KEY}
+
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+
+      # Ollama Configuration (Running locally on host)
+      # The application expects `OLLAMA_BASE_URL` in settings. Keep a
+      # host.docker.internal default so containers can reach the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3}
+
+      # Sync Configuration
+      SYNC_SCHEDULE: ${SYNC_SCHEDULE:-0 0 * * *}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./background-job:/app/background-job
+      - ./shared:/app/shared
+    networks:
+      - hr-chatbot-network
+    restart: unless-stopped
+
+networks:
+  hr-chatbot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_storage:
+    driver: local

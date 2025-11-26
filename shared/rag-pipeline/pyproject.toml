@@ -1,0 +1,30 @@
+[project]
+name = "rag-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "hr-chatbot-config",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.20",
+    "langchain-openai>=0.0.5",
+    "langchain-experimental>=0.0.47",
+    "qdrant-client>=1.7.0",
+    "sqlalchemy>=2.0.25",
+    "psycopg2-binary>=2.9.9",
+    "atlassian-python-api>=3.41.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "testcontainers[postgres]>=3.7.0",
+]
+
+[tool.uv.sources]
+hr-chatbot-config = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
