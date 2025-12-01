@@ -101,6 +101,103 @@ Centralized Pydantic Settings for all services.
 - LLM (environment-aware: Ollama for dev, OpenAI for prod)
 - Memory (conversation history and summarization settings)
 
+## Conversation Memory
+
+The system maintains conversation context across multiple turns within a session:
+
+**How It Works:**
+1. Each message (user question + assistant response) is appended to the session's message array
+2. Messages accumulate until they reach the **threshold** (default: 6 messages)
+3. When threshold is reached, the LLM generates a summary of all messages
+4. The summary replaces the message array—only the summary is retained
+5. New messages accumulate again until the next summarization cycle
+
+**Storage Structure (PostgreSQL `chat_sessions` table):**
+```json
+{
+  "summary": "User asked about vacation policy and sick leave. Assistant explained 15 days PTO annually...",
+  "messages": ["User: Can I carry over unused days?", "Assistant: Yes, up to 5 days can be carried over..."]
+}
+```
+
+**Why This Approach:**
+- Keeps context window manageable for the LLM
+- Preserves important conversation context through summarization
+- Enables multi-turn conversations without token limit issues
+
+**Configuration:**
+```bash
+MEMORY_ENABLED=true
+MEMORY_MESSAGE_THRESHOLD=6        # Summarize after 6 messages
+MEMORY_MAX_SUMMARY_LENGTH=500     # Max tokens for summary
+```
+
+## Data Storage
+
+### PostgreSQL Tables
+
+**`confluence_pages`** - Tracks synchronized Confluence documents:
+
+| Column | Description |
+|--------|-------------|
+| `id` | Confluence page ID (primary key) |
+| `title` | Page title |
+| `space_key` | Confluence space (e.g., "HR") |
+| `content_hash` | SHA256 hash of page content (for change detection) |
+| `last_updated` | Last modified timestamp from Confluence |
+| `version` | Confluence page version number |
+| `url` | Full URL to the page |
+| `synced_at` | When we last synchronized this page |
+
+**`chat_sessions`** - Stores conversation memory:
+
+| Column | Description |
+|--------|-------------|
+| `session_id` | Unique session identifier |
+| `messages` | JSONB containing summary and message array |
+| `created_at` | Session creation time |
+| `updated_at` | Last activity time |
+
+### Qdrant Collection
+
+**`hr_documents`** - Vector embeddings for semantic search:
+
+Each point contains:
+- **Vector**: Document embedding (768 or 1536 dimensions)
+- **Payload**: `page_id`, `title`, `chunk_index`, `text`, `url`, `space_key`, `last_modified`
+
+## Background Sync & Change Detection
+
+The background job runs daily at midnight to keep the knowledge base current.
+
+### How Changes Are Detected
+
+For each Confluence page, the system checks three conditions:
+
+```
+1. Page not in database?     → NEW PAGE       → Process
+2. Content hash different?   → CONTENT CHANGE → Re-index
+3. Timestamp newer?          → METADATA CHANGE → Re-index
+4. None of the above?        → UP-TO-DATE     → Skip
+```
+
+**Content Hash:** SHA256 hash computed from the page's HTML content. Even minor edits change the hash.
+
+**Timestamp Comparison:** Confluence's `last_modified` vs our `last_updated`. Catches changes that might not alter content (e.g., formatting).
+
+### What Re-indexing Does
+
+When a page needs re-indexing:
+
+1. **Delete Old Chunks** - Remove all existing vectors for this page from Qdrant (filtered by `page_id`)
+2. **Fetch Fresh Content** - Get current page content from Confluence API
+3. **Re-chunk** - Split content using semantic chunker (respects natural text boundaries)
+4. **Re-embed** - Generate new vector embeddings for each chunk
+5. **Store Vectors** - Upsert new points to Qdrant with updated metadata
+6. **Update Metadata** - Update PostgreSQL record with new hash, timestamp, and `synced_at`
+
+**Idempotency:** The entire process is idempotent—running sync multiple times produces the same result. If a sync fails mid-way, the next run will retry the failed pages.
+
 ## Technology Stack
 
 | Category | Technology |
