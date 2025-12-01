@@ -1,0 +1,44 @@
+---
+title: HR Chatbot - Question Answering Flow
+---
+
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant A as API Service
+    participant M as Memory Service
+    participant R as RAG Pipeline
+    participant Q as Qdrant
+    participant L as LLM
+    participant P as PostgreSQL
+
+    U->>A: POST /api/v1/chat<br/>{"message": "...", "session_id": "..."}
+
+    A->>M: Get session memory
+    M->>P: Query chat_sessions
+    P-->>M: {summary, messages}
+    M-->>A: Conversation context
+
+    A->>R: retrieve(query)
+    R->>L: Generate query embedding
+    L-->>R: Vector [768 or 1536 dim]
+    R->>Q: Similarity search
+    Q-->>R: Top-k chunks + scores
+    R-->>A: Relevant documents
+
+    A->>L: Draft answer (context + query)
+    L-->>A: Draft response
+
+    A->>L: Critique & refine
+    L-->>A: Final answer + confidence
+
+    alt confidence < 0.6
+        A->>A: notify_hr_node
+        Note over A: Log for HR review
+    end
+
+    A->>M: Update session memory
+    M->>P: Append messages
+    Note over M,P: Summarize if threshold reached
+
+    A-->>U: {"response": "...", "sources": [...], "confidence": 0.87}

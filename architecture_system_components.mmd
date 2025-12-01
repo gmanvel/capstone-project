@@ -1,0 +1,46 @@
+---
+title: HR Chatbot - System Components
+---
+%% Multi-agent RAG system for HR queries using Confluence as knowledge base
+
+graph TB
+    subgraph "User Interface"
+        User[User]
+    end
+
+    subgraph "API Service - Port 8000"
+        API[FastAPI Server]
+        LangGraph[LangGraph Multi-Agent]
+        Memory[Memory Service]
+    end
+
+    subgraph "Background Job"
+        Scheduler[Daily Scheduler<br/>Midnight Sync]
+    end
+
+    subgraph "Shared Modules"
+        RAG[RAG Pipeline]
+        Config[Pydantic Settings]
+    end
+
+    subgraph "Data Stores"
+        Postgres[(PostgreSQL<br/>Metadata + Sessions)]
+        Qdrant[(Qdrant<br/>Vector Embeddings)]
+    end
+
+    subgraph "External Services"
+        Confluence[Confluence API]
+        LLM[LLM<br/>Ollama / OpenAI]
+    end
+
+    User -->|POST /chat| API
+    API --> LangGraph
+    LangGraph --> Memory
+    LangGraph --> RAG
+    LangGraph -->|Generate answers| LLM
+    Memory --> Postgres
+    Scheduler -->|Daily sync| RAG
+    RAG -->|Store metadata| Postgres
+    RAG -->|Store vectors| Qdrant
+    RAG -->|Fetch pages| Confluence
+    RAG -->|Generate embeddings| LLM

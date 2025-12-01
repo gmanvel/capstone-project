@@ -1,0 +1,30 @@
+---
+title: HR Chatbot - Deployment Architecture
+---
+
+graph LR
+    subgraph "Docker Compose"
+        subgraph "Application"
+            API[api:8000]
+            BG[background-job]
+        end
+
+        subgraph "Infrastructure"
+            PG[(postgres:5432)]
+            QD[(qdrant:6333)]
+        end
+    end
+
+    subgraph "External"
+        OL[Ollama:11434<br/>Host Machine]
+        CF[Confluence Cloud]
+    end
+
+    API --> PG
+    API --> QD
+    API --> OL
+    BG --> PG
+    BG --> QD
+    BG --> OL
+    BG --> CF
+    API -.->|Initial setup| CF

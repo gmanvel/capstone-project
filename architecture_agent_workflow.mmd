@@ -1,0 +1,26 @@
+---
+title: HR Chatbot - Agent Workflow (LangGraph)
+---
+
+stateDiagram-v2
+    [*] --> RetrieveMemory: User sends question
+
+    RetrieveMemory --> Retrieve: Load conversation history
+    note right of RetrieveMemory: Check for existing session<br/>Load summary + recent messages
+
+    Retrieve --> Draft: Semantic search in Qdrant
+    note right of Retrieve: Query embedding → cosine similarity<br/>Return top-k relevant chunks
+
+    Draft --> Critique: Generate initial answer
+    note right of Draft: Context + query → LLM<br/>Produce draft response
+
+    Critique --> ConfidenceCheck: Refine answer
+    note right of Critique: Review for accuracy<br/>Improve clarity & completeness
+
+    ConfidenceCheck --> Response: confidence ≥ 0.6
+    ConfidenceCheck --> NotifyHR: confidence < 0.6
+
+    NotifyHR --> Response: Escalate to HR team
+    note right of NotifyHR: Log question for review<br/>Return escalation message
+
+    Response --> [*]: Return answer + sources

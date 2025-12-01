@@ -1,0 +1,41 @@
+---
+title: HR Chatbot - Background Sync Flow
+---
+
+sequenceDiagram
+    autonumber
+    participant S as Scheduler
+    participant R as RAG Pipeline
+    participant C as Confluence API
+    participant P as PostgreSQL
+    participant Q as Qdrant
+    participant L as LLM
+
+    Note over S: Daily at midnight
+
+    S->>R: sync_space("HR")
+    R->>C: Get all pages in space
+    C-->>R: List of pages
+
+    loop For each page
+        R->>P: Check confluence_pages
+        P-->>R: Existing record (or null)
+
+        alt New page OR content_hash changed OR timestamp newer
+            R->>C: Fetch page content
+            C-->>R: HTML content
+
+            R->>R: Parse HTML (BeautifulSoup)
+            R->>R: Semantic chunking
+            R->>L: Generate embeddings
+            L-->>R: Vectors
+
+            R->>Q: Delete old chunks (by page_id)
+            R->>Q: Upsert new vectors
+            R->>P: Update/insert metadata
+        else Up-to-date
+            Note over R: Skip processing
+        end
+    end
+
+    R-->>S: SyncResult{processed, skipped, failed}
