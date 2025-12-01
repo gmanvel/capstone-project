@@ -1,0 +1,271 @@
+# HR Chatbot Architecture
+
+## Overview
+
+Multi-agent RAG system for HR queries using Confluence as knowledge base.
+
+## Technology Stack
+
+- **Language**: Python 3.11+
+- **API Framework**: FastAPI
+- **Agent Orchestration**: LangChain + LangGraph
+- **Vector Database**: Qdrant
+- **Relational Database**: PostgreSQL
+- **LLM**: Ollama (dev) / OpenAI (prod)
+- **Embeddings**: nomic-embed-text (dev) / text-embedding-3-small (prod)
+- **Containerization**: Docker + Docker Compose
+
+## How to Run
+
+```bash
+# 1. Start Ollama locally
+ollama serve && ollama pull mistral && ollama pull nomic-embed-text
+
+# 2. Start services
+docker-compose up -d
+
+# 3. Initialize knowledge base
+curl -X POST http://localhost:8000/api/v1/setup -d '{"space_key": "HR"}'
+
+# 4. Ask questions
+curl -X POST http://localhost:8000/api/v1/chat -d '{"message": "What is the vacation policy?"}'
+```
+
+---
+
+## System Components
+
+```mermaid
+graph TB
+    subgraph "User Interface"
+        User[User]
+    end
+
+    subgraph "API Service - Port 8000"
+        API[FastAPI Server]
+        LangGraph[LangGraph Multi-Agent]
+        Memory[Memory Service]
+    end
+
+    subgraph "Background Job"
+        Scheduler[Daily Scheduler<br/>Midnight Sync]
+    end
+
+    subgraph "Shared Modules"
+        RAG[RAG Pipeline]
+        Config[Pydantic Settings]
+    end
+
+    subgraph "Data Stores"
+        Postgres[(PostgreSQL<br/>Metadata + Sessions)]
+        Qdrant[(Qdrant<br/>Vector Embeddings)]
+    end
+
+    subgraph "External Services"
+        Confluence[Confluence API]
+        LLM[LLM<br/>Ollama / OpenAI]
+    end
+
+    User -->|POST /chat| API
+    API --> LangGraph
+    LangGraph --> Memory
+    LangGraph --> RAG
+    LangGraph -->|Generate answers| LLM
+    Memory --> Postgres
+    Scheduler -->|Daily sync| RAG
+    RAG -->|Store metadata| Postgres
+    RAG -->|Store vectors| Qdrant
+    RAG -->|Fetch pages| Confluence
+    RAG -->|Generate embeddings| LLM
+```
+
+---
+
+## Agent Workflow (LangGraph)
+
+```mermaid
+stateDiagram-v2
+    [*] --> RetrieveMemory: User sends question
+
+    RetrieveMemory --> Retrieve: Load conversation history
+    note right of RetrieveMemory: Check for existing session<br/>Load summary + recent messages
+
+    Retrieve --> Draft: Semantic search in Qdrant
+    note right of Retrieve: Query embedding → cosine similarity<br/>Return top-k relevant chunks
+
+    Draft --> Critique: Generate initial answer
+    note right of Draft: Context + query → LLM<br/>Produce draft response
+
+    Critique --> ConfidenceCheck: Refine answer
+    note right of Critique: Review for accuracy<br/>Improve clarity & completeness
+
+    ConfidenceCheck --> Response: confidence ≥ 0.6
+    ConfidenceCheck --> NotifyHR: confidence < 0.6
+
+    NotifyHR --> Response: Escalate to HR team
+    note right of NotifyHR: Log question for review<br/>Return escalation message
+
+    Response --> [*]: Return answer + sources
+```
+
+---
+
+## Question Answering Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant A as API Service
+    participant M as Memory Service
+    participant R as RAG Pipeline
+    participant Q as Qdrant
+    participant L as LLM
+    participant P as PostgreSQL
+
+    U->>A: POST /api/v1/chat<br/>{"message": "...", "session_id": "..."}
+
+    A->>M: Get session memory
+    M->>P: Query chat_sessions
+    P-->>M: {summary, messages}
+    M-->>A: Conversation context
+
+    A->>R: retrieve(query)
+    R->>L: Generate query embedding
+    L-->>R: Vector [768 or 1536 dim]
+    R->>Q: Similarity search
+    Q-->>R: Top-k chunks + scores
+    R-->>A: Relevant documents
+
+    A->>L: Draft answer (context + query)
+    L-->>A: Draft response
+
+    A->>L: Critique & refine
+    L-->>A: Final answer + confidence
+
+    alt confidence < 0.6
+        A->>A: notify_hr_node
+        Note over A: Log for HR review
+    end
+
+    A->>M: Update session memory
+    M->>P: Append messages
+    Note over M,P: Summarize if threshold reached
+
+    A-->>U: {"response": "...", "sources": [...], "confidence": 0.87}
+```
+
+---
+
+## Background Sync Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Scheduler
+    participant R as RAG Pipeline
+    participant C as Confluence API
+    participant P as PostgreSQL
+    participant Q as Qdrant
+    participant L as LLM
+
+    Note over S: Daily at midnight
+
+    S->>R: sync_space("HR")
+    R->>C: Get all pages in space
+    C-->>R: List of pages
+
+    loop For each page
+        R->>P: Check confluence_pages
+        P-->>R: Existing record (or null)
+
+        alt New page OR content_hash changed OR timestamp newer
+            R->>C: Fetch page content
+            C-->>R: HTML content
+
+            R->>R: Parse HTML (BeautifulSoup)
+            R->>R: Semantic chunking
+            R->>L: Generate embeddings
+            L-->>R: Vectors
+
+            R->>Q: Delete old chunks (by page_id)
+            R->>Q: Upsert new vectors
+            R->>P: Update/insert metadata
+        else Up-to-date
+            Note over R: Skip processing
+        end
+    end
+
+    R-->>S: SyncResult{processed, skipped, failed}
+```
+
+---
+
+## Data Model
+
+```mermaid
+erDiagram
+    confluence_pages {
+        string id PK "Confluence page ID"
+        string title "Page title"
+        string space_key "e.g., HR"
+        string content_hash "SHA256 for change detection"
+        datetime last_updated "From Confluence"
+        int version "Page version"
+        string url "Full page URL"
+        datetime synced_at "Last sync time"
+    }
+
+    chat_sessions {
+        string session_id PK "UUID"
+        json messages "summary + message array"
+        datetime created_at
+        datetime updated_at
+    }
+
+    qdrant_points {
+        uuid id PK "page_id + chunk_index"
+        vector embedding "768 or 1536 dimensions"
+        string page_id FK
+        string title
+        int chunk_index
+        string text "Chunk content"
+        string url
+        datetime last_modified
+    }
+
+    confluence_pages ||--o{ qdrant_points : "has chunks"
+```
+
+---
+
+## Deployment Architecture
+
+```mermaid
+graph LR
+    subgraph "Docker Compose"
+        subgraph "Application"
+            API[api:8000]
+            BG[background-job]
+        end
+
+        subgraph "Infrastructure"
+            PG[(postgres:5432)]
+            QD[(qdrant:6333)]
+        end
+    end
+
+    subgraph "External"
+        OL[Ollama:11434<br/>Host Machine]
+        CF[Confluence Cloud]
+    end
+
+    API --> PG
+    API --> QD
+    API --> OL
+    BG --> PG
+    BG --> QD
+    BG --> OL
+    BG --> CF
+    API -.->|Initial setup| CF
+```
