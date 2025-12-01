@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["shared/config", "shared/rag-pipeline", "api", "background-job"]
+members = ["shared/config", "shared/rag-pipeline", "api", "background-job", "evaluation"]
 
 [dependency-groups]
 dev = [

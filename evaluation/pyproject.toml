@@ -1,0 +1,34 @@
+[project]
+name = "hr-chatbot-eval"
+version = "0.1.0"
+description = "RAGAS-based evaluation framework for HR Chatbot"
+requires-python = ">=3.11"
+dependencies = [
+    "hr-chatbot-config",
+    "rag-pipeline",
+    # RAGAS - modern version compatible with LangChain 0.3+
+    "ragas>=0.2.0,<0.3.0",
+    # LangChain - modern versions
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-openai>=0.2.0",
+    # Ollama support
+    "langchain-ollama>=0.2.0",
+    # HTTP client for API calls
+    "httpx>=0.27.0",
+    # Data handling
+    "datasets>=2.14.0",
+    "pandas>=2.0.0",
+]
+
+[tool.uv.sources]
+hr-chatbot-config = { workspace = true }
+rag-pipeline = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hr_chatbot_eval"]

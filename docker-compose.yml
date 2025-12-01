@@ -151,6 +151,35 @@ services:
       - hr-chatbot-network
     restart: unless-stopped
 
+  # Evaluation Service (run on-demand)
+  evaluation:
+    build:
+      context: .
+      dockerfile: evaluation/Dockerfile
+    container_name: hr-chatbot-eval
+    environment:
+      # API Configuration (points to api service in docker network)
+      API_BASE_URL: http://api:8000/api/v1
+
+      # Ollama Configuration (host machine)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+
+      # Environment
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    volumes:
+      # Mount datasets and results directories
+      - ./evaluation/datasets:/app/evaluation/datasets:ro
+      - ./evaluation/results:/app/evaluation/results
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - hr-chatbot-network
+    profiles:
+      - eval  # Only runs when explicitly requested
+
 networks:
   hr-chatbot-network:
     driver: bridge

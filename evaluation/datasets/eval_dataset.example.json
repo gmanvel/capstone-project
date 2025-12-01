@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "description": "Ciklum Reimbursement Policy for External Education - RAG Evaluation Dataset",
+  "created_at": "2025-11-30T13:15:00Z",
+  "samples": [
+    {
+      "question": "How do I request reimbursement for an external course or certification?",
+      "ground_truth": "To request reimbursement...",
+      "expected_sources": ["url_to_reimbursement_policy_section"]
+    }
+  ]
+}
