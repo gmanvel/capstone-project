@@ -1,41 +1,10 @@
-# HR Chatbot Architecture
+%% HR Chatbot - System Architecture
+%% Multi-agent RAG system for HR queries using Confluence as knowledge base
 
-## Overview
+%% =============================================================================
+%% SYSTEM COMPONENTS
+%% =============================================================================
 
-Multi-agent RAG system for HR queries using Confluence as knowledge base.
-
-## Technology Stack
-
-- **Language**: Python 3.11+
-- **API Framework**: FastAPI
-- **Agent Orchestration**: LangChain + LangGraph
-- **Vector Database**: Qdrant
-- **Relational Database**: PostgreSQL
-- **LLM**: Ollama (dev) / OpenAI (prod)
-- **Embeddings**: nomic-embed-text (dev) / text-embedding-3-small (prod)
-- **Containerization**: Docker + Docker Compose
-
-## How to Run
-
-```bash
-# 1. Start Ollama locally
-ollama serve && ollama pull mistral && ollama pull nomic-embed-text
-
-# 2. Start services
-docker-compose up -d
-
-# 3. Initialize knowledge base
-curl -X POST http://localhost:8000/api/v1/setup -d '{"space_key": "HR"}'
-
-# 4. Ask questions
-curl -X POST http://localhost:8000/api/v1/chat -d '{"message": "What is the vacation policy?"}'
-```
-
----
-
-## System Components
-
-```mermaid
 graph TB
     subgraph "User Interface"
         User[User]
@@ -77,13 +46,11 @@ graph TB
     RAG -->|Store vectors| Qdrant
     RAG -->|Fetch pages| Confluence
     RAG -->|Generate embeddings| LLM
-```
 
----
+%% =============================================================================
+%% AGENT WORKFLOW (LangGraph)
+%% =============================================================================
 
-## Agent Workflow (LangGraph)
-
-```mermaid
 stateDiagram-v2
     [*] --> RetrieveMemory: User sends question
 
@@ -106,13 +73,11 @@ stateDiagram-v2
     note right of NotifyHR: Log question for review<br/>Return escalation message
 
     Response --> [*]: Return answer + sources
-```
 
----
+%% =============================================================================
+%% QUESTION ANSWERING FLOW
+%% =============================================================================
 
-## Question Answering Flow
-
-```mermaid
 sequenceDiagram
     autonumber
     participant U as User
@@ -153,13 +118,11 @@ sequenceDiagram
     Note over M,P: Summarize if threshold reached
 
     A-->>U: {"response": "...", "sources": [...], "confidence": 0.87}
-```
 
----
+%% =============================================================================
+%% BACKGROUND SYNC FLOW
+%% =============================================================================
 
-## Background Sync Flow
-
-```mermaid
 sequenceDiagram
     autonumber
     participant S as Scheduler
@@ -197,13 +160,11 @@ sequenceDiagram
     end
 
     R-->>S: SyncResult{processed, skipped, failed}
-```
 
----
+%% =============================================================================
+%% DATA MODEL
+%% =============================================================================
 
-## Data Model
-
-```mermaid
 erDiagram
     confluence_pages {
         string id PK "Confluence page ID"
@@ -235,13 +196,11 @@ erDiagram
     }
 
     confluence_pages ||--o{ qdrant_points : "has chunks"
-```
 
----
+%% =============================================================================
+%% DEPLOYMENT ARCHITECTURE
+%% =============================================================================
 
-## Deployment Architecture
-
-```mermaid
 graph LR
     subgraph "Docker Compose"
         subgraph "Application"
@@ -268,4 +227,3 @@ graph LR
     BG --> OL
     BG --> CF
     API -.->|Initial setup| CF
-```
