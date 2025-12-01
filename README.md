@@ -15,6 +15,8 @@ When a user asks "What is the vacation policy?", the system retrieves relevant C
 
 ## System Architecture
 
+> See [`architecture_system_components.mmd`](architecture_system_components.mmd) for the system overview and [`architecture_question_answering_flow.mmd`](architecture_question_answering_flow.mmd) for the Q&A sequence diagram.
+
 ```
 ┌─────────────┐     ┌────────────────────────────────────────────────┐
 │    User     │────▶│              API Service (FastAPI)             │
@@ -63,6 +65,8 @@ FastAPI server that handles user queries through a multi-agent reasoning workflo
 | **Draft** | Generates initial answer from retrieved context |
 | **Critique** | Reviews and refines the draft for accuracy and completeness |
 | **Notify HR** | Escalates low-confidence questions (< 0.6) to HR team |
+
+> See [`architecture_agent_workflow.mmd`](architecture_agent_workflow.mmd) for the agent state machine diagram.
 
 ### 2. Background Job (`background-job/`)
 
@@ -169,6 +173,8 @@ Each point contains:
 ## Background Sync & Change Detection
 
 The background job runs daily at midnight to keep the knowledge base current.
+
+> See [`architecture_background_sync_flow.mmd`](architecture_background_sync_flow.mmd) for the sync process flowchart.
 
 ### How Changes Are Detected
 
@@ -300,6 +306,8 @@ See `.env.example` for the complete list of configuration options.
 | postgres | 5432 | Metadata storage |
 | qdrant | 6333 | Vector database |
 | background-job | - | Daily sync (scheduled) |
+
+> See [`architecture_deployment.mmd`](architecture_deployment.mmd) for the container deployment diagram.
 
 ### Useful Commands
 
